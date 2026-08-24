@@ -39,27 +39,59 @@ function retryAfterMs(response: Response): number | null {
   return null;
 }
 
+function abortError(signal?: AbortSignal): unknown {
+  return signal?.reason ?? new DOMException('Aborted', 'AbortError');
+}
+
+function abortableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError(signal));
+
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(abortError(signal));
+    };
+
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 /**
  * `fetch` bounded by a timeout, honoring a single `429 Retry-After` back-off.
  *
  * The timeout (via AbortController) guarantees a wedged faucet can't hang the
- * caller. A `429 Too Many Requests` is retried ONCE after the server-requested
- * delay (capped) rather than surfaced as a hard failure — a rate limit is
- * transient and self-clears. Any other non-ok status is returned as-is for the
- * caller to classify.
+ * caller. A caller-provided signal remains authoritative across both the active
+ * request and the retry delay. A `429 Too Many Requests` is retried ONCE after
+ * the server-requested delay (capped) rather than surfaced as a hard failure —
+ * a rate limit is transient and self-clears. Any other non-ok status is returned
+ * as-is for the caller to classify.
  */
 export async function faucetFetch(
   url: string,
   init?: RequestInit,
   timeoutMs: number = FAUCET_FETCH_TIMEOUT_MS
 ): Promise<Response> {
+  const callerSignal = init?.signal;
   const attempt = async (): Promise<Response> => {
     const controller = new AbortController();
+    const onCallerAbort = () => controller.abort(callerSignal?.reason);
+    if (callerSignal?.aborted) {
+      controller.abort(callerSignal.reason);
+    } else {
+      callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+    }
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return await fetch(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timer);
+      callerSignal?.removeEventListener('abort', onCallerAbort);
     }
   };
 
@@ -68,7 +100,7 @@ export async function faucetFetch(
 
   const waitMs = retryAfterMs(first);
   if (waitMs === null) return first; // 429 with no honorable delay — let the caller fail it
-  await new Promise(resolve => setTimeout(resolve, waitMs));
+  await abortableDelay(waitMs, callerSignal);
   return attempt();
 }
 
