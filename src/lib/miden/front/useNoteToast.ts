@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 
 import { getPersistedSeenNoteIds, persistSeenNoteIds } from 'lib/miden/back/note-checker-storage';
-import { isExtension } from 'lib/platform';
+import { clearNoteReceivedNotification } from 'lib/mobile/native-notifications';
+import { isExtension, isMobile } from 'lib/platform';
 import { useWalletStore } from 'lib/store';
 
 import { useClaimableNotes } from './claimable-notes';
@@ -18,6 +19,7 @@ export function useNoteToastMonitor(publicAddress: string, enabled: boolean = tr
   const checkForNewNotes = useWalletStore(state => state.checkForNewNotes);
   const isFirstFetch = useRef(true);
   const hydratedFromStorage = useRef(false);
+  const lastClaimableSetWasEmpty = useRef(false);
 
   // On extension: hydrate seenNoteIds from chrome.storage.local on mount
   useEffect(() => {
@@ -39,6 +41,15 @@ export function useNoteToastMonitor(publicAddress: string, enabled: boolean = tr
     if (!enabled || !claimableNotes) return;
 
     const currentNoteIds = claimableNotes.map(note => note.id);
+    const claimableSetIsEmpty = currentNoteIds.length === 0;
+
+    // A fixed native notification may outlive the note that caused it (for
+    // example after account recovery). Once the authoritative claimable-note
+    // query says there is nothing left to claim, remove that stale prompt.
+    if (isMobile() && claimableSetIsEmpty && !lastClaimableSetWasEmpty.current) {
+      void clearNoteReceivedNotification();
+    }
+    lastClaimableSetWasEmpty.current = claimableSetIsEmpty;
 
     // On first fetch, seed the seen notes without showing toast
     // This prevents toasting for existing notes when the app loads
