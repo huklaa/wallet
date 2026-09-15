@@ -149,8 +149,8 @@ export async function runStressDriver(
   // so it can maintain expected deltas and compare against the wallet's
   // actual reported state (consumed + pending). First divergent op pinpoints
   // where tokens started going missing.
-  const initA = await walletA.quickBalanceSnapshot();
-  const initB = await walletB.quickBalanceSnapshot();
+  const initA = await walletA.quickBalanceSnapshot({ symbol: tokenSymbol });
+  const initB = await walletB.quickBalanceSnapshot({ symbol: tokenSymbol });
   const initialA = initA.totalReportable;
   const initialB = initB.totalReportable;
   let expectedDeltaA = 0;
@@ -369,7 +369,10 @@ export async function runStressDriver(
     }
 
     // Read actual — parallel, ~100ms total
-    const [snapA, snapB] = await Promise.all([walletA.quickBalanceSnapshot(), walletB.quickBalanceSnapshot()]);
+    const [snapA, snapB] = await Promise.all([
+      walletA.quickBalanceSnapshot({ symbol: tokenSymbol }),
+      walletB.quickBalanceSnapshot({ symbol: tokenSymbol })
+    ]);
     const observedDeltaA = snapA.totalReportable - initialA;
     const observedDeltaB = snapB.totalReportable - initialB;
     const divergenceA = observedDeltaA - expectedDeltaA;

@@ -1591,11 +1591,11 @@ export class ChromeWalletPage implements ChromeWalletPageApi {
   }
 
   /**
-   * Get the balance for a specific token from the Explore page.
-   * If tokenSymbol is not given, returns the balance of the first token row.
+   * Get consumed assets plus pending notes for a specific token symbol.
+   * If tokenSymbol is not given, returns the total across all assets.
    * Returns 0 if no matching token found.
    */
-  async getBalance(_tokenSymbol?: string): Promise<number> {
+  async getBalance(tokenSymbol?: string): Promise<number> {
     await this.navigateHome();
     // The evaluate below needs `__TEST_STORE__` with an account on it; wait for
     // that rather than for a second of wall clock (this runs on every poll of
@@ -1606,7 +1606,7 @@ export class ChromeWalletPage implements ChromeWalletPageApi {
       // Read balances from the Zustand store (consumed assets) AND from
       // chrome.storage.local sync data (consumable notes not yet consumed).
       // The transaction processor auto-consumes notes but may not run in SW.
-      const result = await this.page.evaluate(async () => {
+      const result = await this.page.evaluate(async wanted => {
         const store = (window as any).__TEST_STORE__;
         if (!store) return { balance: 0, debug: 'no store' };
         const state = store.getState();
@@ -1625,6 +1625,7 @@ export class ChromeWalletPage implements ChromeWalletPageApi {
         for (const tokenList of Object.values(freshState.balances || {}) as any[]) {
           if (!Array.isArray(tokenList)) continue;
           for (const token of tokenList) {
+            if (wanted && String(token?.metadata?.symbol ?? '').toLowerCase() !== wanted) continue;
             const amount = parseFloat(String(token.amount ?? token.balance ?? '0'));
             if (amount > 0) {
               totalBalance += amount;
@@ -1641,6 +1642,7 @@ export class ChromeWalletPage implements ChromeWalletPageApi {
           const syncData = storage?.miden_sync_data;
           if (syncData?.notes?.length > 0) {
             for (const note of syncData.notes) {
+              if (wanted && String(note?.metadata?.symbol ?? '').toLowerCase() !== wanted) continue;
               const baseUnits = parseInt(note.amountBaseUnits || '0', 10);
               const decimals = note.metadata?.decimals ?? 8;
               const noteBalance = baseUnits / Math.pow(10, decimals);
@@ -1655,7 +1657,7 @@ export class ChromeWalletPage implements ChromeWalletPageApi {
           balance: totalBalance,
           debug: `consumed=${totalBalance - 0}, notes pending, total=${totalBalance}`
         };
-      });
+      }, tokenSymbol?.toLowerCase());
 
       return typeof result === 'object' ? result.balance : result;
     } catch (e) {
