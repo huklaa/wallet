@@ -26,15 +26,58 @@ if [ "${NO_CHANGELOG_LABEL}" = "true" ]; then
     # 'no changelog' set, so finish successfully
     echo "\"no changelog\" label has been set"
     exit 0
-else
-    # a changelog check is required
-    # fail if the diff is empty
-    if git diff --exit-code "origin/${BASE_REF}" -- "${CHANGELOG_FILE}"; then
-        >&2 echo "Changes should come with an entry in the \"CHANGELOG.md\" file. This behavior
+fi
+
+# A changelog check is required. First fail if the diff is empty.
+if git diff --exit-code "origin/${BASE_REF}" -- "${CHANGELOG_FILE}"; then
+    >&2 echo "Changes should come with an entry in the \"CHANGELOG.md\" file. This behavior
 can be overridden by using the \"no changelog\" label, which is used for changes
 that are trivial / explicitly stated not to require a changelog entry."
-        exit 1
-    fi
-
-    echo "The \"CHANGELOG.md\" file has been updated."
+    exit 1
 fi
+
+latest_release_tag=$(
+    git for-each-ref --sort=-version:refname --format='%(refname:short)' 'refs/tags/v[0-9]*' |
+        sed -n '1p'
+)
+if [ -z "${latest_release_tag}" ]; then
+    >&2 echo "Could not determine the latest release tag."
+    exit 1
+fi
+latest_release_version="${latest_release_tag#v}"
+
+added_lines_file=$(mktemp)
+trap 'rm -f "${added_lines_file}"' EXIT
+
+# Record the line number in the PR version of CHANGELOG.md for every added line.
+# Do not derive a single "allowed window": each added line is checked against the
+# heading that actually governs it.
+if ! git diff --unified=0 "origin/${BASE_REF}" -- "${CHANGELOG_FILE}" |
+    awk '
+        /^@@ / {
+            if (match($0, /\+[0-9]+/)) {
+                new_line = substr($0, RSTART + 1, RLENGTH - 1) + 0
+            }
+            next
+        }
+        /^\+\+\+/ { next }
+        /^\+/ {
+            print new_line
+            new_line++
+            next
+        }
+        /^-/ { next }
+        /^\\ No newline at end of file/ { next }
+        { new_line++ }
+    ' >"${added_lines_file}"
+then
+    >&2 echo "Failed to inspect added changelog lines."
+    exit 1
+fi
+
+if ! bash scripts/check-changelog-placement.sh     "${CHANGELOG_FILE}" "${latest_release_version}" "${added_lines_file}"
+then
+    exit 1
+fi
+
+echo "The \"CHANGELOG.md\" file has been updated in an unreleased section."
