@@ -8,6 +8,7 @@
 - [FEATURE][all] Advanced Settings can export the current account as a CLI-compatible `.mac` file after password, passcode, or device-security confirmation. The flow warns that the file grants access to the account's funds and requires an explicit acknowledgement before saving or sharing it (#537).
 ### Changes
 
+- [FIX][all] Passcode lockouts can no longer be cleared by an interval tick that started before the lockout was armed, and an unlocked screen no longer rewrites an empty time-lock every second (#1079).
 - [FIX][all] A dApp transaction built from its own request bytes is verified again before you approve it. The check that shows what such a transaction really moves could not run for an ordinary account, so the approval sheet fell back to what the site itself declared, and an account with a spending limit refused every one of these transactions rather than counting it.
 - [CHORE][all] The spending-limit E2E suite covers dApp custom transactions: one within the cap is approved and counted, one over it is refused until the wallet's own authentication clears it. The challenge sheet is addressed by its own testid, so the iOS assertion can no longer read a different drawer.
 - [CHANGE][all] The onboarding protection step names the mechanism it will actually use: "Face ID set up" on iOS and "Biometric set up" on every other platform, instead of one combined label (#497).

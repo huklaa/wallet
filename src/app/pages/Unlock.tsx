@@ -51,6 +51,8 @@ const Unlock: FC<UnlockProps> = ({ openForgotPasswordInFullPage = false }) => {
 
   const [attempt, setAttempt] = useLocalStorage<number>(MidenSharedStorageKey.PasswordAttempts, 1);
   const [timelock, setTimeLock] = useLocalStorage<number>(MidenSharedStorageKey.TimeLock, 0);
+  const timelockRef = useRef(timelock);
+  timelockRef.current = timelock;
   const lockLevel = LOCK_TIME * Math.floor(attempt / 3);
 
   // HARDWARE UNLOCK STATE
@@ -160,7 +162,11 @@ const Unlock: FC<UnlockProps> = ({ openForgotPasswordInFullPage = false }) => {
         }
       } catch (err) {
         formAnalytics.trackSubmitFail();
-        if (attempt >= LAST_ATTEMPT) setTimeLock(Date.now());
+        if (attempt >= LAST_ATTEMPT) {
+          const now = Date.now();
+          timelockRef.current = now;
+          setTimeLock(now);
+        }
         setAttempt(attempt + 1);
         setTimeleft(getTimeLeft(Date.now(), LOCK_TIME * Math.floor((attempt + 1) / 3)));
 
@@ -241,16 +247,18 @@ const Unlock: FC<UnlockProps> = ({ openForgotPasswordInFullPage = false }) => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (Date.now() - timelock > lockLevel) {
+      const currentTimelock = timelockRef.current;
+      if (currentTimelock !== 0 && Date.now() - currentTimelock > lockLevel) {
+        timelockRef.current = 0;
         setTimeLock(0);
       }
-      setTimeleft(getTimeLeft(timelock, lockLevel));
+      setTimeleft(getTimeLeft(timelockRef.current, lockLevel));
     }, 1_000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [timelock, lockLevel, setTimeLock]);
+  }, [lockLevel, setTimeLock]);
 
   // Wait for hardware unlock check to complete before showing passcode UI
   if (!hardwareUnlockChecked && !isExtension()) {
