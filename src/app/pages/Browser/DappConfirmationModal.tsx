@@ -37,7 +37,7 @@ import { sameWalletAccountId } from 'lib/miden/sdk/helpers';
 import { hapticLight, hapticMedium } from 'lib/mobile/haptics';
 import { useMobileBackHandler } from 'lib/mobile/useMobileBackHandler';
 import { isDelegateProofEnabled } from 'lib/settings/helpers';
-import { truncateAddress } from 'utils/string';
+import { truncateAddress, truncateOrigin } from 'utils/string';
 
 interface DappConfirmationModalProps {
   request: DAppConfirmationRequest;
@@ -55,7 +55,8 @@ export const DappConfirmationModal: FC<DappConfirmationModalProps> = ({ request,
   // Every non-connect request kind (transaction, consume, sign, importPrivateNote,
   // privateData) renders the same detail-list body; only the prompt line differs.
   const isTransaction = isDetailsConfirmation(request.type);
-  const appName = request.appMeta?.name || request.origin;
+  const displayOrigin = truncateOrigin(request.origin);
+  const appName = request.appMeta?.name || displayOrigin;
   const transactionMessages = request.transactionMessages ?? [];
   const transactionAccountMatches =
     request.type !== 'transaction' ||
@@ -243,7 +244,13 @@ export const DappConfirmationModal: FC<DappConfirmationModalProps> = ({ request,
             <h2 id="dapp-confirmation-title" className="truncate text-lg font-semibold text-black">
               {appName}
             </h2>
-            <p className="truncate text-sm text-text-muted">{request.origin}</p>
+            <p
+              className="whitespace-nowrap text-sm text-text-muted"
+              data-testid="dapp-confirmation-origin"
+              title={request.origin}
+            >
+              {displayOrigin}
+            </p>
           </div>
         </div>
 

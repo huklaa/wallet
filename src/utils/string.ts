@@ -3,6 +3,22 @@ export function truncateHash(hash: string, front = 7, back = 4): string {
   return `${hash.slice(0, front)}…${hash.slice(-back)}`;
 }
 
+/**
+ * Shortens an origin without hiding the hostname suffix that identifies the
+ * requesting dApp. Keeping the scheme and the end is safer than CSS end
+ * truncation, which can leave only attacker-controlled leading subdomains.
+ */
+export function truncateOrigin(origin: string, maxLength = 30): string {
+  if (!origin || origin.length <= maxLength) return origin || '';
+
+  const schemeEnd = origin.indexOf('://');
+  const prefixLength = schemeEnd === -1 ? Math.max(1, Math.floor(maxLength / 3)) : schemeEnd + 3;
+  const suffixLength = maxLength - prefixLength - 1;
+
+  if (suffixLength < 1) return `${origin.slice(0, Math.max(1, maxLength - 1))}…`;
+  return `${origin.slice(0, prefixLength)}…${origin.slice(-suffixLength)}`;
+}
+
 // mtst1aplqzwh6s4gvcyzsvx726y6xvsgt5qv5_qruqqypuyph -> mtst1a...5qv5...uyph
 export function truncateAddress(address: string, includeBack = true, front = 6, middle = 4, back = 4): string {
   if (!address) return '';

@@ -26,7 +26,7 @@ import { WalletAccount } from 'lib/shared/types';
 import { useRetryableSWR } from 'lib/swr';
 import useSafeState from 'lib/ui/useSafeState';
 import { navigate, useLocation } from 'lib/woozie';
-import { truncateAddress, truncateHash } from 'utils/string';
+import { truncateAddress, truncateHash, truncateOrigin } from 'utils/string';
 
 import Alert from './atoms/Alert';
 import FormSecondaryButton from './atoms/FormSecondaryButton';
@@ -139,8 +139,8 @@ const RequestOriginBanner: FC<{ origin: string; children: React.ReactNode }> = (
   >
     <Icon name={IconName.Globe} fill="currentColor" size="md" />
     <div className="flex flex-col">
-      <Name className="font-semibold" data-testid="confirm-request-origin">
-        {origin}
+      <Name className="font-semibold" data-testid="confirm-request-origin" title={origin}>
+        {truncateOrigin(origin, 24)}
       </Name>
       {children}
     </div>

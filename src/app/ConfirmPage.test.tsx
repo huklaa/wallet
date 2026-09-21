@@ -213,7 +213,7 @@ jest.mock('./atoms/FormSubmitButton', () => ({
 }));
 jest.mock('./atoms/Name', () => ({
   __esModule: true,
-  default: ({ children }: any) => <span data-testid="name">{children}</span>
+  default: ({ children, ...props }: any) => <span {...props}>{children}</span>
 }));
 jest.mock('./icons/v2', () => ({
   Icon: ({ name }: any) => <span data-testid="icon" data-name={name} />,
@@ -958,6 +958,16 @@ describe('sign payload — signingInputs', () => {
 
 describe('assets payload', () => {
   const assetsPayload = () => ({ type: 'assets', ...baseFields(), sourcePublicKey: 's', assets: [], preview: {} });
+
+  it('keeps the registrable-domain suffix visible in the request banner', () => {
+    const origin = 'https://login.accounts.wallet.security.example.co.uk';
+    setPayload({ ...assetsPayload(), origin });
+    render(<ConfirmPage />);
+
+    const displayedOrigin = screen.getByTestId('confirm-request-origin');
+    expect(displayedOrigin).toHaveTextContent('https://…y.example.co.uk');
+    expect(displayedOrigin).toHaveAttribute('title', origin);
+  });
 
   it('renders the request-assets prompt with the no-preview default content', () => {
     setPayload(assetsPayload());

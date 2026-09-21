@@ -1,4 +1,23 @@
-import { capitalizeFirstLetter, truncateAddress, truncateHash } from './string';
+import { capitalizeFirstLetter, truncateAddress, truncateHash, truncateOrigin } from './string';
+
+describe('truncateOrigin', () => {
+  it('keeps short origins unchanged', () => {
+    expect(truncateOrigin('https://miden.io')).toBe('https://miden.io');
+  });
+
+  it('keeps the hostname suffix visible for a long origin', () => {
+    const origin = 'https://login.accounts.wallet.security.example.co.uk';
+    const displayed = truncateOrigin(origin);
+
+    expect(displayed).toBe('https://…ecurity.example.co.uk');
+    expect(displayed).toHaveLength(30);
+    expect(displayed.endsWith('example.co.uk')).toBe(true);
+  });
+
+  it('middle-truncates origins without a scheme', () => {
+    expect(truncateOrigin('very.long.attacker.controlled.example.com', 24)).toBe('very.lon…led.example.com');
+  });
+});
 
 describe('truncateHash', () => {
   it('returns empty string for empty input', () => {

@@ -108,6 +108,21 @@ const limitedTransactionRequest = () =>
   });
 
 describe('DappConfirmationModal', () => {
+  it('keeps the registrable-domain suffix visible for a long dApp origin', () => {
+    const origin = 'https://login.accounts.wallet.security.example.co.uk';
+    render(
+      <DappConfirmationModal
+        request={buildRequest({ origin, appMeta: undefined })}
+        accountId={FULL_ACCOUNT_ID}
+        onResolve={jest.fn()}
+      />
+    );
+
+    const displayedOrigin = screen.getByTestId('dapp-confirmation-origin');
+    expect(displayedOrigin).toHaveTextContent('https://…ecurity.example.co.uk');
+    expect(displayedOrigin).toHaveAttribute('title', origin);
+  });
+
   // Regression: previously the modal received an already-truncated string
   // and echoed it back as the canonical accountPublicKey. The backend then
   // tried to bech32-decode "mtst1aps...wr6w" and threw "invalid character
