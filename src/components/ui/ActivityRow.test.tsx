@@ -261,10 +261,35 @@ describe('ActivityRow', () => {
       expect(onClick).toHaveBeenCalledTimes(1);
     });
 
+    it.each(['Enter', ' '])('is focusable and activates with the %p key', key => {
+      const onClick = jest.fn();
+      renderRow({ onClick });
+
+      const button = screen.getByRole('button');
+      expect(button).toHaveAttribute('tabindex', '0');
+      expect(button).toHaveClass('focus-visible:ring-2');
+
+      fireEvent.keyDown(button, { key });
+
+      expect(hapticLight).toHaveBeenCalledTimes(1);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores non-activation keys', () => {
+      const onClick = jest.fn();
+      renderRow({ onClick });
+
+      fireEvent.keyDown(screen.getByRole('button'), { key: 'ArrowDown' });
+
+      expect(hapticLight).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
     it('has no button role and does not fire haptics when onClick is absent', () => {
       const { container } = renderRow();
 
       expect(screen.queryByRole('button')).toBeNull();
+      expect(container.firstChild).not.toHaveAttribute('tabindex');
       // clicking the row is a no-op
       fireEvent.click(container.firstChild as HTMLElement);
       expect(hapticLight).not.toHaveBeenCalled();

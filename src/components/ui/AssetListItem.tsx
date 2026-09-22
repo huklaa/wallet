@@ -37,6 +37,11 @@ export const AssetListItem: FC<AssetListItemProps> = ({
     hapticLight();
     onClick();
   };
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onClick || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    handleClick();
+  };
 
   const deltaColor =
     delta?.direction === 'negative'
@@ -49,10 +54,13 @@ export const AssetListItem: FC<AssetListItemProps> = ({
     <div
       data-testid={dataTestId}
       role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick ? handleClick : undefined}
+      onKeyDown={onClick ? handleKeyDown : undefined}
       className={classNames(
         'w-full h-18 flex items-center justify-between font-heading',
-        onClick && 'cursor-pointer active:opacity-90 transition-opacity',
+        onClick &&
+          'cursor-pointer active:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-primary/30',
         className
       )}
     >

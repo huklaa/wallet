@@ -127,6 +127,11 @@ export const ActivityRow: FC<ActivityRowProps> = ({
     hapticLight();
     onClick();
   };
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onClick || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    handleClick();
+  };
   // A "Claim All" can sweep up any number of distinct assets, and this row has
   // one line for them; past a couple the amount column starves the title beside
   // it. Show the first few in the order the caller passed and count the rest.
@@ -148,8 +153,15 @@ export const ActivityRow: FC<ActivityRowProps> = ({
       data-testid={testId}
       data-entry-key={entryKey}
       role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick ? handleClick : undefined}
-      className={classNames('w-full flex items-center py-4 justify-between', onClick && 'cursor-pointer', className)}
+      onKeyDown={onClick ? handleKeyDown : undefined}
+      className={classNames(
+        'w-full flex items-center py-4 justify-between',
+        onClick &&
+          'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-primary/30',
+        className
+      )}
     >
       <div className="flex items-center gap-2">
         <div
