@@ -2,6 +2,7 @@ import { OperationAbortedError } from 'lib/miden/back/offscreen-codec';
 import { WasmClientPoisonedError } from 'lib/miden/sdk/wasm-client-poison';
 
 import {
+  extractUnknownSubmitTransactionId,
   isProverProcedureMismatch,
   resolveTransactionErrorMessage,
   TRANSACTION_FEE_CONVERSION_INFO_MISSING_ERROR,
@@ -12,6 +13,24 @@ import {
   TRANSACTION_ENGINE_RECOVERED_ERROR,
   TRANSACTION_ENGINE_RECOVERED_PRE_WRITE_ERROR
 } from './constants';
+
+describe('extractUnknownSubmitTransactionId', () => {
+  const id = `0x${'ab'.repeat(32)}`;
+
+  it('extracts the id only from the SDK ambiguous-submit signature', () => {
+    expect(
+      extractUnknownSubmitTransactionId(
+        new Error(`submission of transaction ${id} came back without a definite outcome; nothing was recorded locally`)
+      )
+    ).toBe(id);
+  });
+
+  it('does not mistake an unrelated digest for a transaction id', () => {
+    expect(
+      extractUnknownSubmitTransactionId(new Error(`procedure with root digest ${id} could not be found`))
+    ).toBeUndefined();
+  });
+});
 
 // The real native-prover error captured in #487.
 const MISSING_PROCEDURE =

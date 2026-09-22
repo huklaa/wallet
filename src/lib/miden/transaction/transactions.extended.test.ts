@@ -118,6 +118,7 @@ jest.mock('dexie', () => ({
 }));
 
 const mockGetInputNoteDetails = jest.fn();
+const mockGetTransactionCommitState = jest.fn();
 const mockSyncState = jest.fn().mockResolvedValue(undefined);
 // The #260 offscreen client proxy reads (syncState/getInputNoteDetails) through
 // the `lib/...` alias of miden-client, which jest mocks separately from the
@@ -127,7 +128,8 @@ jest.mock('lib/miden/sdk/miden-client', () => jest.requireMock('../sdk/miden-cli
 jest.mock('../sdk/miden-client', () => ({
   getMidenClient: async () => ({
     syncState: mockSyncState,
-    getInputNoteDetails: mockGetInputNoteDetails
+    getInputNoteDetails: mockGetInputNoteDetails,
+    getTransactionCommitState: mockGetTransactionCommitState
   }),
   withWasmClientLock: async <T>(fn: () => Promise<T>) => fn()
 }));
@@ -238,8 +240,66 @@ describe('forceCaneclAllInProgressTransactions', () => {
 });
 
 describe('verifyStuckTransactionsFromNode', () => {
+  it('persists the SDK transaction id when an ambiguous submit is failed', async () => {
+    const transactionId = `0x${'56'.repeat(32)}`;
+    txStore.push({
+      id: 'tx-ambiguous',
+      type: 'send',
+      status: ITransactionStatus.GeneratingTransaction,
+      initiatedAt: 100
+    });
+
+    await cancelTransaction(
+      txStore[0] as Transaction,
+      new Error(
+        `submission of transaction ${transactionId} came back without a definite outcome; nothing was recorded locally`
+      )
+    );
+
+    expect(txStore[0]).toEqual(
+      expect.objectContaining({
+        status: ITransactionStatus.Failed,
+        transactionId,
+        mayHaveSubmitted: true
+      })
+    );
+  });
+
   it('returns 0 when no in-progress transactions exist', async () => {
     expect(await verifyStuckTransactionsFromNode()).toBe(0);
+  });
+
+  it('reconciles a failed ambiguous submit after sync reports it committed', async () => {
+    txStore.push({
+      id: 'tx-ambiguous',
+      type: 'send',
+      status: ITransactionStatus.Failed,
+      transactionId: `0x${'12'.repeat(32)}`,
+      mayHaveSubmitted: true,
+      error: 'unknown outcome'
+    });
+    mockGetTransactionCommitState.mockResolvedValueOnce('committed');
+
+    expect(await verifyStuckTransactionsFromNode()).toBe(1);
+    expect(txStore[0]).toEqual(
+      expect.objectContaining({ status: ITransactionStatus.Completed, stage: 'complete', displayMessage: 'Completed' })
+    );
+    expect(txStore[0].error).toBeUndefined();
+  });
+
+  it('keeps an ambiguous submit failed when the node has no positive evidence', async () => {
+    txStore.push({
+      id: 'tx-ambiguous',
+      type: 'send',
+      status: ITransactionStatus.Failed,
+      transactionId: `0x${'34'.repeat(32)}`,
+      mayHaveSubmitted: true,
+      error: 'unknown outcome'
+    });
+    mockGetTransactionCommitState.mockResolvedValueOnce('not-found');
+
+    expect(await verifyStuckTransactionsFromNode()).toBe(0);
+    expect(txStore[0].status).toBe(ITransactionStatus.Failed);
   });
 
   it('joins a run still in progress instead of starting another', async () => {

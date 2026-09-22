@@ -175,6 +175,20 @@ export function formatRawTransactionError(error: unknown): string {
 }
 
 /**
+ * Recover the transaction id carried by the SDK's ambiguous-submit error.
+ *
+ * Keep this deliberately narrower than a generic `0x...` scan: transaction
+ * errors can contain account, note, procedure, and digest ids too. Persisting
+ * one of those as `transactionId` would make the retry guard query the wrong
+ * object and could turn an unrelated failure into a false completion.
+ */
+export function extractUnknownSubmitTransactionId(error: unknown): string | undefined {
+  const raw = formatRawTransactionError(error);
+  const match = raw.match(/submission of transaction (0x[0-9a-f]{64}) came back without a definite outcome/i);
+  return match?.[1];
+}
+
+/**
  * A deterministic native-prover failure where the on-device prover is missing a
  * kernel procedure the transaction needs — a version/artifact mismatch between
  * the packaged prover and the transaction kernel, NOT a transient outage. The

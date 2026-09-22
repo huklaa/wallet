@@ -10,6 +10,7 @@ import { elapsedMsSince, operationOfType, stepOfStage } from 'lib/telemetry/tran
 
 import {
   formatRawTransactionError,
+  extractUnknownSubmitTransactionId,
   INVALID_NOTE_ERROR,
   resolveTransactionErrorMessage,
   TRANSACTION_EXPIRED_ERROR,
@@ -20,7 +21,13 @@ import {
   USER_CANCELLED_TRANSACTION_REASON
 } from './constants';
 import { getTransactionsInProgress } from './get';
-import { clearCancelledInFlight, markCancelledInFlight, markMayHaveSubmitted, updateTransactionStatus } from './helper';
+import {
+  clearCancelledInFlight,
+  completeVerifiedLandedTransaction,
+  markCancelledInFlight,
+  markMayHaveSubmitted,
+  updateTransactionStatus
+} from './helper';
 import { notifyBackgroundTransactionFailed } from '../back/background-notification';
 import { midenClientProxy } from '../back/miden-client-proxy';
 import { isOperationAbortedError } from '../back/offscreen-codec';
@@ -80,6 +87,7 @@ export const cancelTransaction = async (
   // otherwise-opaque SDK errors, e.g. a prover timeout during 'proving'.
   const failedStage = existing?.stage;
   const rawError = formatRawTransactionError(error);
+  const unknownSubmitTransactionId = extractUnknownSubmitTransactionId(error);
   // The same structural pre-write finding `cancelTransactionAfterPipelineStopped` uses to
   // withhold the may-have-submitted crossing, re-derived HERE from the row this function
   // already read, so the message and the crossing can never disagree: hedging "left in an
@@ -108,6 +116,14 @@ export const cancelTransaction = async (
     dbTx.error = displayError;
     // Keep the untouched thrown error around when the display message rewrote it.
     if (displayError !== rawError) dbTx.rawError = rawError;
+    // The SDK includes the id in this one error even though the normal success
+    // result never reaches our completion handler. Capture it before the row
+    // becomes terminal so the next sync can adjudicate the original submit
+    // instead of leaving Retry with no chain identity (#1081).
+    if (unknownSubmitTransactionId && dbTx.transactionId === undefined) {
+      dbTx.transactionId = unknownSubmitTransactionId;
+      dbTx.mayHaveSubmitted = true;
+    }
     dbTx.displayMessage = displayMessage;
     dbTx.displayIcon = 'FAILED';
     return undefined;
@@ -662,14 +678,19 @@ export type SendLandedVerdict = 'landed' | 'unknown';
  * DTOs carry no row id. `isSubmitOutcomeUnknown` (constants.ts) is what closes
  * that gap, by refusing the retry outright for the rebuilt-request types.
  */
-export const verifySendLanded = async (tx: { id: string; transactionId?: string }): Promise<SendLandedVerdict> => {
+export const verifySendLanded = async (
+  tx: { id: string; transactionId?: string },
+  sync: boolean = true
+): Promise<SendLandedVerdict> => {
   if (!tx.transactionId) return 'unknown';
   const txId = tx.transactionId;
   try {
-    try {
-      await syncUnderBoundedLock();
-    } catch (syncError) {
-      console.warn('[verifySendLanded] sync failed; reading last-synced tx state for', tx.id, syncError);
+    if (sync) {
+      try {
+        await syncUnderBoundedLock();
+      } catch (syncError) {
+        console.warn('[verifySendLanded] sync failed; reading last-synced tx state for', tx.id, syncError);
+      }
     }
     const state = await withWasmClientLock(async () => midenClientProxy.getTransactionCommitState(txId));
     // `'discarded'` is deliberately NOT `'landed'`: the node rejected the tx, so
@@ -738,16 +759,36 @@ const verifyStuckTransactions = async (): Promise<number> => {
   // Only check GeneratingTransaction status - NOT Queued
   // Queued transactions haven't started processing yet, so the note being claimable is expected
   const inProgressTransactions = await getTransactionsInProgress();
-  if (inProgressTransactions.length === 0) return 0;
-
   // Filter to only consume transactions with a noteId
   const consumeTransactions = inProgressTransactions.filter(
     (tx): tx is ConsumeTransaction => tx.type === 'consume' && !!(tx as ConsumeTransaction).noteId
   );
 
-  if (consumeTransactions.length === 0) return 0;
-
   let resolvedCount = 0;
+
+  // A submit whose response was lost is already terminal locally, so it never
+  // appears in `getTransactionsInProgress()`. The SDK error carries its id and
+  // `cancelTransaction` persists it above; after AutoSync, promote only rows
+  // for which the client has positive pending/committed evidence. A missing or
+  // discarded record remains Failed: absence is not proof that rebroadcasting a
+  // value-moving transaction is safe.
+  const ambiguousFailed = await Repo.transactions
+    .filter(
+      tx =>
+        tx.status === ITransactionStatus.Failed &&
+        tx.mayHaveSubmitted === true &&
+        tx.transactionId !== undefined &&
+        ['send', 'swap', 'bridged-send', 'execute'].includes(tx.type)
+    )
+    .toArray();
+  for (const tx of ambiguousFailed) {
+    if ((await verifySendLanded(tx, false)) !== 'landed') continue;
+    await completeVerifiedLandedTransaction(tx.id, {
+      displayMessage: 'Completed',
+      completedAt: Math.floor(Date.now() / 1000)
+    });
+    resolvedCount++;
+  }
 
   for (const tx of consumeTransactions) {
     // sync: false — this reaper rides AutoSync; syncing per stuck consume would be
