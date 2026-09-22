@@ -17,7 +17,7 @@ import { expect, test } from '../fixtures/extension';
 const PASSWORD = 'Password123!';
 const SEED = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'.split(' ');
 
-async function importWallet(extensionContext: BrowserContext, extensionId: string): Promise<void> {
+async function importWallet(extensionContext: BrowserContext, extensionId: string): Promise<Page> {
   const page = await extensionContext.newPage();
   await page.goto(`chrome-extension://${extensionId}/fullpage.html`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('onboarding-welcome').waitFor({ timeout: 30_000 });
@@ -44,7 +44,7 @@ async function importWallet(extensionContext: BrowserContext, extensionId: strin
   // The wallet is Ready once the side-panel handoff offers to open it; this test drives the popup
   // instead, so it stops here.
   await expect(page.getByRole('button', { name: /open wallet/i })).toBeVisible({ timeout: 30_000 });
-  await page.close();
+  return page;
 }
 
 async function openPopup(extensionContext: BrowserContext, extensionId: string, locale: string): Promise<Page> {
@@ -75,13 +75,7 @@ test.describe('Network corner ribbon', () => {
     ['en', 'I understand'],
     ['de', 'Ich habe verstanden']
   ] as const) {
-    // FIXME(wallet#1092): the context dies in `openPopup` right after `importWallet` closes its
-    // page, so this never reaches its assertions. It is not a regression: `pr.yml` carries
-    // mock-e2e and its branch filter meant this spec never ran in CI on any of the 54 PRs that
-    // introduced it. The ribbon's placement and docked state stay covered by TabLayout.test.tsx
-    // and NetworkModeRibbon.test.tsx; what is unguarded until this is fixed is the real-popup
-    // layout measurement at 360x600.
-    test.fixme(`sits in the tab bar's corner and opens a sheet that fits a 360x600 popup (${locale})`, async ({
+    test(`sits in the tab bar's corner and opens a sheet that fits a 360x600 popup (${locale})`, async ({
       extensionContext,
       extensionId
     }) => {
@@ -98,8 +92,9 @@ test.describe('Network corner ribbon', () => {
         await chrome.storage.local.remove('fresh_install');
       });
 
-      await importWallet(extensionContext, extensionId);
+      const onboardingPage = await importWallet(extensionContext, extensionId);
       const page = await openPopup(extensionContext, extensionId, locale);
+      await onboardingPage.close();
 
       // No banner tops the wallet any more.
       await expect(page.getByTestId('network-mode-banner')).toHaveCount(0);
