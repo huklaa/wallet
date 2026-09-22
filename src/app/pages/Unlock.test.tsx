@@ -418,9 +418,10 @@ describe('Unlock — mobile passcode numpad', () => {
     expect(mockBioHasKey).toHaveBeenCalledTimes(1);
     expect(mockUnlock).not.toHaveBeenCalled();
 
-    // Interval tick with no time-lock hits the Date.now()-timelock > lockLevel branch.
+    // Idle interval ticks leave the time-lock untouched.
     await advance(1100);
     expect(screen.getByTestId('unlock-passcode')).toBeInTheDocument();
+    expect(mockLsStore).not.toHaveProperty('TimeLock');
   });
 
   it('accumulates six digits (with a delete) and auto-submits successfully', async () => {
@@ -483,6 +484,28 @@ describe('Unlock — mobile passcode numpad', () => {
     expect(mockLsStore.PasswordAttempts).toBe(6);
     expect(typeof mockLsStore.TimeLock).toBe('number');
     expect(mockLsStore.TimeLock).not.toBe(0); // setTimeLock(Date.now()) ran
+  });
+
+  it('does not let a stale interval clear a newly armed time-lock', async () => {
+    mockUnlock.mockRejectedValue(new Error('nope'));
+    mockLsStore = { PasswordAttempts: 3, TimeLock: 0 };
+
+    let staleIntervalTick: (() => void) | undefined;
+    jest.spyOn(global, 'setInterval').mockImplementation((handler: TimerHandler) => {
+      if (!staleIntervalTick && typeof handler === 'function') staleIntervalTick = () => handler();
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    });
+
+    const { container } = await renderUnlock();
+    type(container, '333333');
+    await advance(600);
+
+    const armedAt = mockLsStore.TimeLock;
+    expect(armedAt).not.toBe(0);
+
+    act(() => staleIntervalTick?.());
+
+    expect(mockLsStore.TimeLock).toBe(armedAt);
   });
 
   it('clears the incorrect-passcode error when a digit is deleted', async () => {

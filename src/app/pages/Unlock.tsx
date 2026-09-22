@@ -74,6 +74,7 @@ const Unlock: FC<UnlockProps> = ({ openForgotPasswordInFullPage = false }) => {
   const [attempt, setAttempt] = useLocalStorage<number>(MidenSharedStorageKey.PasswordAttempts, 1);
   const [timelock, setTimeLock] = useLocalStorage<number>(MidenSharedStorageKey.TimeLock, 0);
   const lockLevel = LOCK_TIME * Math.floor(attempt / 3);
+  const lockoutUntilRef = useRef(timelock > 0 ? timelock + lockLevel : 0);
 
   // HARDWARE UNLOCK STATE
   // Mobile & Desktop: tries hardware unlock (biometric/passcode) automatically
@@ -159,6 +160,10 @@ const Unlock: FC<UnlockProps> = ({ openForgotPasswordInFullPage = false }) => {
 
   const isDisabled = useMemo(() => Date.now() - timelock <= lockLevel, [timelock, lockLevel]);
 
+  useEffect(() => {
+    lockoutUntilRef.current = timelock > 0 ? timelock + lockLevel : 0;
+  }, [timelock, lockLevel]);
+
   const submitPasscode = useCallback(
     async (passcode: string) => {
       if (isSubmitting) return;
@@ -179,7 +184,12 @@ const Unlock: FC<UnlockProps> = ({ openForgotPasswordInFullPage = false }) => {
           window.location.reload();
         }
       } catch (err) {
-        if (attempt >= LAST_ATTEMPT) setTimeLock(Date.now());
+        if (attempt >= LAST_ATTEMPT) {
+          const startedAt = Date.now();
+          const nextLockLevel = LOCK_TIME * Math.floor((attempt + 1) / 3);
+          lockoutUntilRef.current = startedAt + nextLockLevel;
+          setTimeLock(startedAt);
+        }
         setAttempt(attempt + 1);
         setTimeleft(getTimeLeft(Date.now(), LOCK_TIME * Math.floor((attempt + 1) / 3)));
 
@@ -260,16 +270,18 @@ const Unlock: FC<UnlockProps> = ({ openForgotPasswordInFullPage = false }) => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (Date.now() - timelock > lockLevel) {
+      const lockoutUntil = lockoutUntilRef.current;
+      if (lockoutUntil > 0 && Date.now() > lockoutUntil) {
+        lockoutUntilRef.current = 0;
         setTimeLock(0);
       }
-      setTimeleft(getTimeLeft(timelock, lockLevel));
+      setTimeleft(getTimeLeft(lockoutUntil, 0));
     }, 1_000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [timelock, lockLevel, setTimeLock]);
+  }, [setTimeLock]);
 
   // Wait for hardware unlock check to complete before showing passcode UI
   if (!hardwareUnlockChecked && !isExtension()) {
