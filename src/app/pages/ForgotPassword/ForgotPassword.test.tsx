@@ -353,6 +353,28 @@ describe('ForgotPassword', () => {
     expect(mockPutToStorage).not.toHaveBeenCalled();
   });
 
+  it('recovers from an endpoint-override write failure after clearing local data', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockFetchFromStorage.mockResolvedValue({ rpcUrl: 'https://custom.example.com' });
+    mockPutToStorage.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const { container } = renderPage();
+    await dispatch({ id: 'create-wallet' });
+    await dispatch({ id: 'create-password-submit', payload: { password: 'secret' } });
+    await dispatch({ id: 'confirmation' });
+
+    expect(mockClearClientStorage).toHaveBeenCalledTimes(1);
+    expect(mockRegisterWallet).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(captured.props?.recoveryError).toBe('storage unavailable');
+    expect(flow(container).getAttribute('data-loading')).toBe('false');
+
+    await dispatch({ id: 'confirmation' });
+    expect(mockRegisterWallet).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+    errSpy.mockRestore();
+  });
+
   it('confirmation hands off to the side panel when available (#428)', async () => {
     mockPostOnboardingRoute.mockReturnValue('/finish-side-panel');
     renderPage();

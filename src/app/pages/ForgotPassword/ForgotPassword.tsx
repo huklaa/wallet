@@ -250,18 +250,28 @@ const ForgotPassword: FC = () => {
         case 'confirmation': {
           setIsLoading(true);
           setRecoveryError(null);
-          const outcome = await register();
-          setIsLoading(false);
-          // Block the exit ONLY on a real failure. 'skipped' means the guarded
-          // branch never ran, so nothing was destroyed and the previous
-          // navigate-home behaviour is still right; 'failed' means the reset
-          // already happened, so leaving would strand the user on a wiped
-          // wallet with no explanation (#630).
-          if (outcome === 'failed') break;
-          if (outcome === 'ok') settleRecoverFlow(handle => handle.complete());
-          // Guardian recovery just completed — hand off to the side panel like
-          // first-run onboarding rather than always entering in-tab (#428).
-          navigate(postOnboardingRoute());
+          try {
+            const outcome = await register();
+            // Block the exit ONLY on a real failure. 'skipped' means the guarded
+            // branch never ran, so nothing was destroyed and the previous
+            // navigate-home behaviour is still right; 'failed' means the reset
+            // already happened, so leaving would strand the user on a wiped
+            // wallet with no explanation (#630).
+            if (outcome === 'failed') break;
+            if (outcome === 'ok') settleRecoverFlow(handle => handle.complete());
+            // Guardian recovery just completed — hand off to the side panel like
+            // first-run onboarding rather than always entering in-tab (#428).
+            navigate(postOnboardingRoute());
+          } catch (e) {
+            // Storage and Guardian-discovery calls happen outside register()'s
+            // registerWallet catch. Surface those failures too: after the wipe,
+            // leaving this screen would make a recoverable error look like data
+            // loss, while keeping isLoading set would also disable Back forever.
+            console.error(e);
+            setRecoveryError(e instanceof Error ? e.message : String(e));
+          } finally {
+            setIsLoading(false);
+          }
           break;
         }
         case 'back':
