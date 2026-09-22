@@ -1,14 +1,14 @@
 import { clearClipboard, cn } from './util';
 
 describe('ui utilities', () => {
-  it('clears the clipboard', () => {
-    const writeText = jest.fn();
+  it('clears the clipboard', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, 'clipboard', {
       configurable: true,
       value: { writeText }
     });
 
-    clearClipboard();
+    await expect(clearClipboard()).resolves.toBe(true);
 
     expect(writeText).toHaveBeenCalledWith('');
   });
@@ -21,7 +21,7 @@ describe('ui utilities', () => {
     delete (window.navigator as { clipboard?: unknown }).clipboard;
 
     try {
-      await expect(clearClipboard()).resolves.toBeUndefined();
+      await expect(clearClipboard()).resolves.toBe(false);
     } finally {
       if (stub) Object.defineProperty(window.navigator, 'clipboard', stub);
     }
@@ -36,7 +36,7 @@ describe('ui utilities', () => {
     const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     try {
-      await expect(clearClipboard()).resolves.toBeUndefined();
+      await expect(clearClipboard()).resolves.toBe(false);
       expect(logged).toHaveBeenCalled();
     } finally {
       logged.mockRestore();

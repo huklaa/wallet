@@ -2912,6 +2912,96 @@ describe('HomePrompts', () => {
     if (stub) Object.defineProperty(navigator, 'clipboard', stub);
   });
 
+  it('keeps a later copy failure visible until its own status timeout', async () => {
+    jest.useFakeTimers();
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const writeText = jest.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    mockUseWalletPromptStorage.mockReturnValue(
+      makePromptState({
+        storage: {
+          version: 1,
+          prompts: { [WalletPromptType.HotKeyHardwareUnavailable]: WalletPromptStatus.Pending },
+          pendingNotesDismissedIds: []
+        },
+        isPromptPending: (type: WalletPromptType) => type === WalletPromptType.HotKeyHardwareUnavailable
+      })
+    );
+
+    try {
+      render(
+        <HomePrompts
+          account={account}
+          balances={fundedBalance}
+          balancesLoading={false}
+          claimableNotes={[]}
+          fundingNotes={[]}
+          tokenPrices={{}}
+        />
+      );
+
+      const action = screen.getByRole('button', { name: 'hotKeyHardwareErrorPromptAction' });
+      fireEvent.click(action);
+      await act(async () => {});
+      expect(screen.getByTestId('prompt-card')).toHaveAttribute('data-status', 'success');
+
+      act(() => jest.advanceTimersByTime(1000));
+      fireEvent.click(action);
+      await act(async () => {});
+      expect(screen.getByTestId('prompt-card')).toHaveAttribute('data-status', 'failure');
+
+      act(() => jest.advanceTimersByTime(500));
+      expect(screen.getByTestId('prompt-card')).toHaveAttribute('data-status', 'failure');
+      act(() => jest.advanceTimersByTime(1000));
+      expect(screen.getByTestId('prompt-card')).toHaveAttribute('data-status', 'idle');
+    } finally {
+      errorSpy.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  it('ignores repeated hot-key error copy actions while one is in flight', async () => {
+    let resolveCopy: (() => void) | undefined;
+    const writeText = jest.fn(
+      () =>
+        new Promise<void>(resolve => {
+          resolveCopy = resolve;
+        })
+    );
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    mockUseWalletPromptStorage.mockReturnValue(
+      makePromptState({
+        storage: {
+          version: 1,
+          prompts: { [WalletPromptType.HotKeyHardwareUnavailable]: WalletPromptStatus.Pending },
+          pendingNotesDismissedIds: []
+        },
+        isPromptPending: (type: WalletPromptType) => type === WalletPromptType.HotKeyHardwareUnavailable
+      })
+    );
+
+    render(
+      <HomePrompts
+        account={account}
+        balances={fundedBalance}
+        balancesLoading={false}
+        claimableNotes={[]}
+        fundingNotes={[]}
+        tokenPrices={{}}
+      />
+    );
+
+    const action = screen.getByRole('button', { name: 'hotKeyHardwareErrorPromptAction' });
+    fireEvent.click(action);
+    await act(async () => {});
+    fireEvent.click(action);
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(action).toBeDisabled();
+
+    await act(async () => resolveCopy?.());
+    expect(screen.getByTestId('prompt-card')).toHaveAttribute('data-status', 'success');
+  });
+
   it('initiates a hot-key rotation and routes to the generating-transaction page from the rotation prompt', async () => {
     const completePrompt = jest.fn();
     mockInitiateReplaceHotKeyTransaction.mockResolvedValue('tx-rotate-1');

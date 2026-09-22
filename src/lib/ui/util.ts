@@ -13,12 +13,14 @@ import { TYPE_STYLES } from './type-styles';
  * activation is the common case, and it leaves the secret on the clipboard. It never rejects, so
  * a caller that ignores it (React ignores a handler's return value) creates nothing floating.
  */
-export const clearClipboard = async (): Promise<void> => {
+export const clearClipboard = async (): Promise<boolean> => {
   try {
     await window.navigator.clipboard.writeText('');
+    return true;
   } catch (error) {
-    // Nothing on screen can report this, but it must not vanish: the secret is still there.
+    // The caller can surface this outcome because the secret is still on the clipboard.
     console.error('[clipboard] failed to clear the clipboard after a secret was pasted:', error);
+    return false;
   }
 };
 

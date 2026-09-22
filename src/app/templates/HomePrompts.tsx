@@ -241,6 +241,7 @@ export const HomePrompts: FC<HomePromptsProps> = ({
   const [copyStatusIndicator, setCopyStatusIndicator] = useState<PromptCardStatus>('idle');
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const isMounted = useIsMounted();
+  const copyingHotKeyErrorRef = useRef(false);
   const [rotationStatusIndicator, setRotationStatusIndicator] = useState<PromptCardStatus>('idle');
   const rotatingRef = useRef(false);
   const [bridgeTransactions, setBridgeTransactions] = useState<string[]>([]);
@@ -370,6 +371,13 @@ export const HomePrompts: FC<HomePromptsProps> = ({
   }, [account.publicKey, bridgePromptPending, completePrompt, isLoaded]);
 
   const copyHotKeyError = useCallback(() => {
+    if (copyingHotKeyErrorRef.current) return;
+    copyingHotKeyErrorRef.current = true;
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = undefined;
+    }
+    setCopyStatusIndicator('loading');
     const text = hotKeyError ?? 'Hot-key secure hardware unavailable';
     // The write is owned by an async function: a bare `navigator.clipboard` dereference throws
     // synchronously where the API is absent, and the `.catch` below - the only thing that reports
@@ -383,13 +391,20 @@ export const HomePrompts: FC<HomePromptsProps> = ({
         // checked here, not just cleaned up there.
         if (!isMounted()) return;
         setCopyStatusIndicator('success');
-        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = setTimeout(() => setCopyStatusIndicator('idle'), 1500);
       })
       .catch(error => {
         console.error('[wallet-prompts] failed to copy hot-key error:', error);
         if (!isMounted()) return;
         setCopyStatusIndicator('failure');
+      })
+      .finally(() => {
+        copyingHotKeyErrorRef.current = false;
+        if (!isMounted()) return;
+        copyTimerRef.current = setTimeout(() => {
+          if (!isMounted()) return;
+          setCopyStatusIndicator('idle');
+          copyTimerRef.current = undefined;
+        }, 1500);
       });
   }, [hotKeyError, isMounted]);
 
@@ -871,7 +886,8 @@ export const HomePrompts: FC<HomePromptsProps> = ({
         case WalletPromptType.HotKeyHardwareUnavailable:
           return {
             onAction: copyHotKeyError,
-            status: copyStatusIndicator
+            status: copyStatusIndicator,
+            actionDisabled: copyStatusIndicator === 'loading'
           };
         case WalletPromptType.HotKeyRotationNeeded:
           return {

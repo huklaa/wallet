@@ -9,6 +9,7 @@ import ImportAccount from './ImportAccount';
 
 const mockImportAccount = jest.fn();
 const mockUpdateCurrentAccount = jest.fn();
+const mockClearClipboard = clearClipboard as jest.MockedFunction<typeof clearClipboard>;
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key })
@@ -56,6 +57,7 @@ jest.mock('app/atoms/Alert', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockClearClipboard.mockResolvedValue(true);
   mockImportAccount.mockResolvedValue('mtst1imported');
   mockUpdateCurrentAccount.mockResolvedValue(undefined);
 });
@@ -132,6 +134,15 @@ it('clears the clipboard when a secret is pasted', () => {
   fireEvent.paste(screen.getByLabelText('privateKey'));
 
   expect(clearClipboard).toHaveBeenCalledTimes(1);
+});
+
+it('shows an error when the pasted private key cannot be cleared from the clipboard', async () => {
+  mockClearClipboard.mockResolvedValueOnce(false);
+  render(<ImportAccount />);
+
+  fireEvent.paste(screen.getByLabelText('privateKey'));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('error: smthWentWrong');
 });
 
 it('shows an import failure without navigating or logging the secret', async () => {

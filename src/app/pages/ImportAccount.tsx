@@ -48,6 +48,12 @@ const ImportAccount: FC = () => {
     [importAccount, isSubmitting, t, updateCurrentAccount]
   );
 
+  const onPrivateKeyPaste = useCallback(async () => {
+    if (!(await clearClipboard())) {
+      setError(t('smthWentWrong'));
+    }
+  }, [t]);
+
   return (
     <div className="flex flex-1 min-h-0 flex-col bg-app-bg">
       <PageHeader className="px-4" title={t('importAccount')} onBack={goBack} focusTitleOnMount />
@@ -69,7 +75,7 @@ const ImportAccount: FC = () => {
           textarea
           rows={2}
           className="resize-none font-sans"
-          onPaste={clearClipboard}
+          onPaste={onPrivateKeyPaste}
         />
         <FormField
           {...register('name', {
