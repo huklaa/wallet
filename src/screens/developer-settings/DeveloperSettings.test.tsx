@@ -212,6 +212,22 @@ describe('DeveloperSettings', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/');
   });
 
+  it('surfaces an endpoint write failure, releases Save, and allows retry', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    applyEndpointOverride.mockRejectedValueOnce(new Error('storage unavailable'));
+    render(<DeveloperSettings />);
+
+    fireEvent.click(screen.getByTestId('dev-endpoints-save'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('storage unavailable');
+    expect(screen.getByTestId('dev-endpoints-save')).toHaveAttribute('data-loading', 'false');
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('dev-endpoints-save'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'));
+    errorSpy.mockRestore();
+  });
+
   it('discards the sync fuse on save, since every conclusion in it was about the OLD node', async () => {
     // Mobile and desktop own the idle loop, and this is their only repoint affordance. A
     // fused wallet pointed at a working RPC would otherwise probe once per 30 min — the
