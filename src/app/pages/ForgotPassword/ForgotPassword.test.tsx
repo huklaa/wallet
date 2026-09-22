@@ -353,6 +353,26 @@ describe('ForgotPassword', () => {
     expect(mockPutToStorage).not.toHaveBeenCalled();
   });
 
+  it('clears loading and surfaces a storage failure after the recovery wipe (#1093)', async () => {
+    const boom = new Error('storage quota exceeded');
+    mockFetchFromStorage.mockResolvedValue({ rpcUrl: 'https://custom.example.com' });
+    mockPutToStorage.mockRejectedValueOnce(boom);
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { container } = renderPage();
+    await dispatch({ id: 'create-wallet' });
+    await dispatch({ id: 'create-password-submit', payload: { password: 'secret' } });
+    await dispatch({ id: 'confirmation' });
+
+    expect(mockClearClientStorage).toHaveBeenCalledTimes(1);
+    expect(mockRegisterWallet).not.toHaveBeenCalled();
+    expect(flow(container).getAttribute('data-loading')).toBe('false');
+    expect(captured.props?.recoveryError).toContain('storage quota exceeded');
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalledWith(boom);
+    errSpy.mockRestore();
+  });
+
   it('confirmation hands off to the side panel when available (#428)', async () => {
     mockPostOnboardingRoute.mockReturnValue('/finish-side-panel');
     renderPage();
