@@ -86,6 +86,22 @@ describe('settings helpers', () => {
     it('leaves an already-clean URL unchanged', () => {
       expect(sanitizeGuardianUrl('https://guardian.example.com')).toBe('https://guardian.example.com');
     });
+
+    it('canonicalizes host casing and default ports for comparison', () => {
+      expect(sanitizeGuardianUrl('https://Guardian.Example.com:443')).toBe('https://guardian.example.com');
+      expect(sanitizeGuardianUrl('http://LOCALHOST:80/path/')).toBe('http://localhost/path');
+      expect(sanitizeGuardianUrl('https://guardian.example.com:8443')).toBe('https://guardian.example.com:8443');
+    });
+
+    it('strips path slashes before a query or fragment', () => {
+      expect(sanitizeGuardianUrl('https://guardian.example.com/path/?network=test#operator')).toBe(
+        'https://guardian.example.com/path?network=test#operator'
+      );
+    });
+
+    it('keeps invalid input cleanup backwards-compatible', () => {
+      expect(sanitizeGuardianUrl('  not-a-url///  ')).toBe('not-a-url');
+    });
   });
 
   describe('delegate proof setting', () => {

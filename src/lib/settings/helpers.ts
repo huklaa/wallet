@@ -262,13 +262,23 @@ export function isValidGuardianUrl(value: string): boolean {
 }
 
 /**
- * Normalize a Guardian endpoint for storage and comparison: trim surrounding
- * whitespace and strip any trailing slashes, so `https://g.example.com/` and
- * `https://g.example.com` are treated as the same endpoint. Apply this to any
- * user-entered Guardian URL before persisting or comparing it.
+ * Normalize a Guardian endpoint for storage and comparison. Parsing the URL
+ * canonicalizes its host and default port; trailing path slashes are removed
+ * without disturbing a query or fragment. Apply this to any user-entered
+ * Guardian URL before persisting or comparing it.
  */
 export function sanitizeGuardianUrl(value: string): string {
-  return value.trim().replace(/\/+$/, '');
+  const trimmed = value.trim();
+
+  try {
+    const url = new URL(trimmed);
+    const suffix = `${url.search}${url.hash}`;
+    url.search = '';
+    url.hash = '';
+    return `${url.toString().replace(/\/+$/, '')}${suffix}`;
+  } catch {
+    return trimmed.replace(/\/+$/, '');
+  }
 }
 
 export function setThemeSetting(theme: ThemeSetting) {
