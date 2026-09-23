@@ -396,14 +396,14 @@ describe('ChooseGuardianScreen', () => {
     expect(screen.getByText('currentLabel')).toBeInTheDocument();
   });
 
-  it('falls back to the first provider when currentEndpoint matches nothing', () => {
+  it('pre-selects nothing when currentEndpoint matches no listed provider', () => {
     const { container } = render(<ChooseGuardianScreen currentEndpoint="https://unknown.example.com" />);
-    const [ozBtn] = optionButtons(container);
+    const buttons = optionButtons(container);
 
-    expect(isHighlighted(ozBtn!)).toBe(true);
-    // No "current" badge (nothing matched); the default badge is shown instead.
+    buttons.forEach(button => expect(button).toHaveAttribute('aria-checked', 'false'));
     expect(screen.queryByText('currentLabel')).not.toBeInTheDocument();
-    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.queryByText('default')).not.toBeInTheDocument();
+    expect(screen.getByTestId('continue-button')).toBeDisabled();
   });
 
   // RotateGuardian's current endpoint hydrates from storage after the first render;
@@ -737,8 +737,9 @@ describe('ChooseGuardianScreen — offline banner', () => {
   });
 
   // The 30 s re-probe can flip an explicitly picked card offline while the user
-  // is still on the screen. The pick is an intent; the verdict wins.
-  it('drops an explicit selection that goes offline on a later probe round', () => {
+  // is still on the screen. The pick is an intent; the verdict must refuse it,
+  // never substitute a different recovery custodian.
+  it('refuses an explicit selection that goes offline instead of substituting another provider', () => {
     const onSubmit = jest.fn();
     const { container, rerender } = render(<ChooseGuardianScreen onSubmit={onSubmit} />);
     const [ozBtn, gwBtn] = optionButtons(container);
@@ -751,10 +752,11 @@ describe('ChooseGuardianScreen — offline banner', () => {
 
     expect(gwBtn).toBeDisabled();
     expect(gwBtn).toHaveAttribute('aria-checked', 'false');
-    expect(ozBtn).toHaveAttribute('aria-checked', 'true');
+    expect(ozBtn).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('continue-button')).toBeDisabled();
 
     fireEvent.click(screen.getByTestId('continue-button'));
-    expect(onSubmit).toHaveBeenCalledWith({ guardianId: 'open-zeppelin', guardianEndpoint: OZ.endpoint });
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   // A card that recovers is selected again without a tap: the intent never

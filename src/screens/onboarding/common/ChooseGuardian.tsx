@@ -89,6 +89,7 @@ export const ChooseGuardianScreen: React.FC<ChooseGuardianScreenProps> = ({
       // literal by a trailing slash (RotateGuardian compares them the same way).
       const current = options.find(o => sanitizeGuardianUrl(o.endpoint) === sanitizeGuardianUrl(currentEndpoint));
       if (current) return current.id;
+      return '';
     }
     return options[0]?.id ?? '';
   }, [currentEndpoint, options]);
@@ -105,9 +106,11 @@ export const ChooseGuardianScreen: React.FC<ChooseGuardianScreenProps> = ({
   // Derived rather than stored, so a card that comes back online is simply
   // selected again, and a mid-screen outage cannot submit.
   //
-  // - Create flow (no `currentEndpoint`): fall to the first online provider —
+  // - Create flow, before an explicit pick: fall to the first online provider —
   //   the default was only ever "the first one", so the first live one is the
   //   same rule applied to the cards the user can actually pick.
+  // - Any explicit pick: fall to NOTHING. Silently substituting another
+  //   recovery custodian would submit an operator the user did not choose.
   // - Switch flow: fall to NOTHING. The pre-selected card is the operator the
   //   account is on, and the whole offline-rotation flow starts because that
   //   operator is down. Picking a replacement for the user would nudge them
@@ -119,7 +122,7 @@ export const ChooseGuardianScreen: React.FC<ChooseGuardianScreenProps> = ({
       ? NO_GUARDIAN_ID
       : intended && !isOfflineEndpoint(intended.endpoint)
         ? intended.id
-        : currentEndpoint
+        : pickedId !== null || currentEndpoint
           ? ''
           : (options.find(o => !isOfflineEndpoint(o.endpoint))?.id ?? '');
 
