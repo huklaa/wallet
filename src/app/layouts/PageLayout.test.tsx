@@ -40,6 +40,7 @@ const setEnv = (overrides: Record<string, unknown> = {}) => {
 };
 
 const mockSetOnboardingCompleted = jest.fn();
+let mockOnboardingProgressSuspension: Promise<void> | null = null;
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -66,10 +67,13 @@ jest.mock('app/env', () => ({
 }));
 
 jest.mock('app/hooks/useOnboardingProgress', () => ({
-  useOnboardingProgress: () => ({
-    onboardingCompleted: false,
-    setOnboardingCompleted: (...args: unknown[]) => mockSetOnboardingCompleted(...args)
-  })
+  useOnboardingProgress: () => {
+    if (mockOnboardingProgressSuspension) throw mockOnboardingProgressSuspension;
+    return {
+      onboardingCompleted: false,
+      setOnboardingCompleted: (...args: unknown[]) => mockSetOnboardingCompleted(...args)
+    };
+  }
 }));
 
 // DocBg mutates document.documentElement classList — not under test, mock away.
@@ -141,6 +145,7 @@ describe('PageLayout', () => {
     mockIsMobile = false;
     mockIsDesktop = false;
     mockLocation = { historyPosition: 0, pathname: '/' };
+    mockOnboardingProgressSuspension = null;
     capturedBackHandler = null;
     mockIOInstances = [];
     setEnv();
@@ -231,6 +236,21 @@ describe('PageLayout', () => {
       </PageLayout>
     );
     expect(screen.getByTestId('spinner')).toBeInTheDocument();
+  });
+
+  it('keeps page content mounted while the toolbar suspends', () => {
+    mockOnboardingProgressSuspension = new Promise<void>(() => {});
+
+    render(
+      <React.Suspense fallback={<div data-testid="root-fallback" />}>
+        <PageLayout>
+          <span data-testid="child">content</span>
+        </PageLayout>
+      </React.Suspense>
+    );
+
+    expect(screen.getByTestId('child')).toBeInTheDocument();
+    expect(screen.queryByTestId('root-fallback')).not.toBeInTheDocument();
   });
 
   // -- toolbar visibility --------------------------------------------------

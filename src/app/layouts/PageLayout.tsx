@@ -56,7 +56,11 @@ const PageLayout: FC<PageLayoutProps> = ({
         style={{ ...containerStyles }}
       >
         <ContentPaper>
-          {!hideToolbar && <Toolbar {...toolbarProps} />}
+          {!hideToolbar && (
+            <Suspense fallback={null}>
+              <Toolbar {...toolbarProps} />
+            </Suspense>
+          )}
 
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={contentContainerStyle}>
             <ErrorBoundary whileMessage="displaying this page">
