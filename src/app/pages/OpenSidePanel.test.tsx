@@ -25,6 +25,11 @@ import en from '../../../public/_locales/en/en.json';
 
 // `mock`-prefixed so jest's hoisted mock factory may reference it.
 let mockReady = true;
+let mockSidePanel = false;
+
+jest.mock('app/env', () => ({
+  useAppEnv: () => ({ sidePanel: mockSidePanel })
+}));
 
 jest.mock('components/ui/Spinner', () => ({
   Spinner: () => <div data-testid="spinner" />
@@ -75,6 +80,7 @@ describe('OpenSidePanel', () => {
 
   beforeEach(async () => {
     mockReady = true;
+    mockSidePanel = false;
     mockOpenSidePanel.mockReset();
     mockCloseTab.mockReset();
     mockNavigate.mockReset();
@@ -165,6 +171,19 @@ describe('OpenSidePanel', () => {
     expect(testContainer!.querySelector('[data-testid="spinner"]')).not.toBeNull();
     expect(testContainer!.querySelector('h1')).toBeNull();
     expect(testContainer!.textContent).toContain('Creating your wallet');
+  });
+
+  it('moves a ready side-panel instance to the wallet route after recovery', async () => {
+    mockSidePanel = true;
+    await render();
+
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('keeps the ready onboarding tab on the handoff route until its button is clicked', async () => {
+    await render();
+
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('opens the side panel and closes the onboarding tab on success', async () => {

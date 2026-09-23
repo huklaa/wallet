@@ -2,6 +2,7 @@ import React, { FC, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { useAppEnv } from 'app/env';
 import { Icon, IconName } from 'app/icons/v2';
 import { Button } from 'components/Button';
 import { Hero } from 'components/ui/Hero';
@@ -32,8 +33,18 @@ const READY_TIMEOUT_MS = 60_000;
  */
 const OpenSidePanel: FC = () => {
   const { t } = useTranslation();
+  const { sidePanel } = useAppEnv();
   const { ready } = useMidenContext();
   const [opening, setOpening] = useState(false);
+
+  // The handoff route belongs to the onboarding tab, but Chrome restores the
+  // same route when it opens the side panel. Move that panel instance onto the
+  // wallet route as soon as the wallet is ready. Guardian recoveries may still
+  // be blocked by HotKeyRotationGate there; once rotation finishes, the gate
+  // then reveals the wallet instead of this completion screen a second time.
+  useEffect(() => {
+    if (sidePanel && ready) navigate('/');
+  }, [sidePanel, ready]);
 
   // Don't spin forever if Ready never arrives — bail to the wallet home (which
   // shows Explore when ready, or the onboarding screen if creation truly
