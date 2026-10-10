@@ -51,8 +51,9 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    # Publish only from upstream; contribution forks may not have Pages configured.
     # For workflow_run triggers, only act on main-branch runs.
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.head_branch == 'main' }}
+    if: ${{ github.repository == '0xMiden/wallet' && (github.event_name != 'workflow_run' || github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.2 (TBD)
+
+### Fixes
+
+- [FIX][ci] Restrict docs and E2E gallery publishing to the upstream repository so contribution forks without GitHub Pages do not fail during Pages configuration.
+
 ## 1.16.1 (TBD)
 
 ### Features
