@@ -18,9 +18,9 @@ jobs:
         persist-credentials: false
     - name: Validate actual patched workflow guards
       run: "node <<'NODE'\nconst fs = require('node:fs');\nconst source = fs.readFileSync('.github/workflows/pages.yml', 'utf8');\nconst names\
-        \ = new Set(['Configure Pages', 'Upload Pages artifact', 'Deploy to GitHub Pages']);\nconst expected = \"if: ${{ github.repository ==\
-        \ '0xMiden/wallet' }}\";\nconst steps = source.split(/^      - name: /m).slice(1);\nlet publications = 0;\nfor (const step of steps) {\n\
-        \  const name = step.split('\\n')[0];\n  const guards = step.split('\\n').filter(line => /^        if:/.test(line));\n  if (names.has(name))\
+        \ = new Set(['Configure Pages', 'Upload Pages artifact', 'Deploy to GitHub Pages']);\nconst expected = \"if: $\" + \"{{ github.repository\
+        \ == '0xMiden/wallet' }}\";\nconst steps = source.split(/^      - name: /m).slice(1);\nlet publications = 0;\nfor (const step of steps)\
+        \ {\n  const name = step.split('\\n')[0];\n  const guards = step.split('\\n').filter(line => /^        if:/.test(line));\n  if (names.has(name))\
         \ {\n    if (guards.length !== 1 || guards[0].trim() !== expected) throw new Error('Unexpected guard: ' + name);\n    publications++;\n\
         \  } else if (guards.length !== 0) throw new Error('Build step was gated: ' + name);\n}\nif (publications !== 3) throw new Error('Missing\
         \ publication steps');\nconst jekyll = steps.find(step => step.startsWith('Build docs'));\nif (!jekyll.includes(\"GITHUB_PAGES: 'true'\"\
