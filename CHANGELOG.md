@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.2 (TBD)
+
+### Fixes
+
+- [FIX][ci] Forks build the documentation and E2E gallery without requiring a GitHub Pages site; Pages configuration, upload, and deployment remain limited to the upstream repository.
+
 ## 1.16.1 (TBD)
 
 ### Features
