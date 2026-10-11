@@ -1,0 +1,83 @@
+name: Wallet Pages build validation (no deployment)
+'on':
+  push:
+    branches:
+    - ci-wallet-pages-build-validation
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: 18bb29aadd139ba5e31500d64d75f5ce6d6ab71d
+        persist-credentials: false
+    - name: Validate actual patched workflow guards
+      run: "node <<'NODE'\nconst fs = require('node:fs');\nconst source = fs.readFileSync('.github/workflows/pages.yml', 'utf8');\nconst names\
+        \ = new Set(['Configure Pages', 'Upload Pages artifact', 'Deploy to GitHub Pages']);\nconst expected = \"if: ${{ github.repository ==\
+        \ '0xMiden/wallet' }}\";\nconst steps = source.split(/^      - name: /m).slice(1);\nlet publications = 0;\nfor (const step of steps) {\n\
+        \  const name = step.split('\\n')[0];\n  const guards = step.split('\\n').filter(line => /^        if:/.test(line));\n  if (names.has(name))\
+        \ {\n    if (guards.length !== 1 || guards[0].trim() !== expected) throw new Error('Unexpected guard: ' + name);\n    publications++;\n\
+        \  } else if (guards.length !== 0) throw new Error('Build step was gated: ' + name);\n}\nif (publications !== 3) throw new Error('Missing\
+        \ publication steps');\nconst jekyll = steps.find(step => step.startsWith('Build docs'));\nif (!jekyll.includes(\"GITHUB_PAGES: 'true'\"\
+        )) throw new Error('Missing Jekyll build environment');\nif (!steps.some(step => step.startsWith('Build E2E gallery into /e2e'))) throw\
+        \ new Error('Missing gallery build');\nfor (const repository of ['0xMiden/wallet', 'huklaa/wallet']) {\n  console.log(`${repository}:\
+        \ docs/gallery build=true, publication=${repository === '0xMiden/wallet'}`);\n}\nconsole.log('Actual patch workflow publication guards\
+        \ and ungated builds verified');\nNODE"
+    - name: Configure Pages
+      if: ${{ github.repository == '0xMiden/wallet' }}
+      uses: actions/configure-pages@v5
+    - name: Build docs (Jekyll, reproduces the legacy Pages build)
+      uses: actions/jekyll-build-pages@v1
+      env:
+        GITHUB_PAGES: 'true'
+      with:
+        source: ./docs
+        destination: ./_site
+    - name: Make _site writable
+      run: sudo chown -R "$(id -u):$(id -g)" _site
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Gather E2E screenshot artifacts (latest COMPLETED main run per workflow)
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: "set -u\nmkdir -p _e2e_stage\nWORKFLOWS=\"e2e-blockchain.yml e2e-android.yml e2e-bridge.yml e2e-bridge-in.yml e2e-dapp-browser.yml\
+        \ e2e-resilience.yml pr-e2e-swap.yml pr-e2e-earn.yml pr-e2e-guardian-lifecycle.yml pr-e2e-bridge-guardian.yml\"\nfor wf in $WORKFLOWS;\
+        \ do\n  # Pick the latest run that RAN TO COMPLETION \u2014 success OR failure \u2014 but\n  # not \"cancelled\" (a rapid series of main\
+        \ pushes makes concurrency cancel\n  # earlier in-progress runs, and a cancelled run has only partial artifacts\n  # that shrank the gallery)\
+        \ and not in-progress (no artifacts yet).\n  #\n  # Deliberately NOT \"success only\": these workflows bundle many jobs (e.g.\n  # e2e-blockchain\
+        \ runs Chrome + iOS mobile + guardian), and one flaky job\n  # turns the whole run's conclusion to \"failure\" \u2014 which would otherwise\n\
+        \  # freeze the gallery on a stale run even though the jobs that mattered\n  # passed and uploaded complete artifacts (upload-artifact\
+        \ runs on\n  # `if: always()`). Each job's artifact is self-contained: a job that\n  # passed contributes a full filmstrip; a job that\
+        \ failed contributes\n  # however far it got (which is the useful, current state anyway).\n  rid=$(gh run list --workflow \"$wf\" --branch\
+        \ main --limit 20 --json databaseId,conclusion \\\n    --jq 'map(select(.conclusion==\"success\" or .conclusion==\"failure\"))[0].databaseId\
+        \ // empty' 2>/dev/null || true)\n  if [ -z \"$rid\" ]; then echo \"no completed main run for $wf\"; continue; fi\n  echo \"::group::$wf\
+        \ (run $rid)\"\n  tmp=\"_e2e_stage/_tmp\"\n  rm -rf \"$tmp\"; mkdir -p \"$tmp\"\n  # Download all artifacts of the run; keep only those\
+        \ that contain screens/.\n  gh run download \"$rid\" -D \"$tmp\" 2>/dev/null || echo \"  (no artifacts / download failed)\"\n  for art\
+        \ in \"$tmp\"/*/; do\n    [ -d \"$art\" ] || continue\n    if find \"$art\" -path '*/screens/*.png' -print -quit 2>/dev/null | grep -q\
+        \ .; then\n      name=$(basename \"$art\")\n      rm -rf \"_e2e_stage/$name\"\n      mv \"$art\" \"_e2e_stage/$name\"\n      echo \" \
+        \ kept: $name\"\n    fi\n  done\n  rm -rf \"$tmp\"\n  echo \"::endgroup::\"\ndone\necho \"staged jobs:\"; ls -1 _e2e_stage 2>/dev/null\
+        \ || echo \"  (none)\"\n"
+    - name: Build E2E gallery into /e2e
+      run: "node scripts/build-e2e-gallery.mjs \\\n  --input _e2e_stage \\\n  --output ./_site/e2e \\\n  --branch main \\\n  --sha \"${{ github.sha\
+        \ }}\" \\\n  --run-url \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\" \\\n  --generated-at \"\
+        $(date -u +%Y-%m-%dT%H:%M:%SZ)\"\n"
+    - name: Upload Pages artifact
+      if: ${{ github.repository == '0xMiden/wallet' }}
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./_site
+    - name: Deploy to GitHub Pages
+      if: ${{ github.repository == '0xMiden/wallet' }}
+      id: deploy
+      uses: actions/deploy-pages@v4
+    - name: Check generated site outputs
+      run: 'test -s _site/index.html
+
+        test -s _site/e2e/index.html'
